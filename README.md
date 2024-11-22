@@ -11,12 +11,82 @@ Writing compelling fiction is a multifaceted process combining elements such as 
 The **Tell Me A Story** dataset is available in JSONL format at: [link](https://console.cloud.google.com/storage/browser/tell-me-a-story). The data can be downloaded via direct download using:
 
 ```bash
-wget https://storage.googleapis.com/tell-me-a-story/tell-me-a-story-train.jsonl
-wget https://storage.googleapis.com/tell-me-a-story/tell-me-a-story-validation.jsonl
-wget https://storage.googleapis.com/tell-me-a-story/tell-me-a-story-test.jsonl
+wget https://storage.googleapis.com/tell-me-a-story/tell-me-a-story-train_encrypted.jsonl
+wget https://storage.googleapis.com/tell-me-a-story/tell-me-a-story-validation_encrypted.jsonl
+wget https://storage.googleapis.com/tell-me-a-story/tell-me-a-story-test_encrypted.jsonl
 ```
 
-The dataset files when downloaded will take up approximately 3MB. There are three data splits: `train`, `validation`, and `test`. The dataset contains the following columns:
+The dataset files when downloaded will take up approximately 3MB.
+
+### Dataset decryption
+The files have been encrypted to prevent the dataset from being scraped by automated scraping tools.
+
+This repository contains both the symmetric key `skey.key` and private key `private_key.pem` required to decrypt the files.
+The symmetric key is encrypted and can be un-encrypted using the private key.
+
+The files can be decrypted using the Python package `cryptography`.
+If you do not have it, you can install it using the following command:
+
+```
+pip install cryptography
+```
+
+Then use the following script to decrypt the files:
+
+```python
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.fernet import Fernet
+import sys
+import os
+
+if len(sys.argv) > 3:
+    filename = sys.argv[1]  # Name of the file to decrypt.
+    skey_file = sys.argv[2]  # File containing the symmetrical key.
+    pkey_file = sys.argv[3]  # File containing the private key.
+
+    # Load the private key.
+    with open(pkey_file, 'rb') as f:
+        private_key = serialization.load_pem_private_key(
+            f.read(),
+            password=None,
+            backend=default_backend()
+        )
+
+    # Load the symmetrical key.
+    with open(skey_file, 'rb') as f:
+      skey = f.read()
+
+    # Load the file to decrypt.
+    with open(filename, 'rb') as f:
+      data = f.read()
+
+    # Decrypt the symmetrical key.
+    unenc_skey = private_key.decrypt(
+        skey,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+
+    # Decrypt the data.
+    f = Fernet(unenc_skey)
+    decrypted = f.decrypt(data)
+
+    # Write the data to file.
+    out_file = filename.replace('_encrypted.jsonl', '.jsonl')
+    with open(out_file, 'wb') as f:
+        f.write(decrypted)
+else:
+    print('Usage: ' + os.path.basename(__file__) + ' filename.jsonl skey.key private_key.pem')
+```
+
+### Dataset columns
+There are three data splits: `train`, `validation`, and `test`. The dataset contains the following columns:
 
 - `example_id` (str):  A unique identifier for each input prompt.
 - `inputs` (str): The input writing prompt.
